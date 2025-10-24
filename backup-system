@@ -1,21 +1,45 @@
 #!/usr/bin/env bash
 
 AUTO_CONFIRM=false
-if [[ "$1" == "-y" ]]; then
-    AUTO_CONFIRM=true
-elif [[ "$1" == "-h" ]]; then
-    echo "Usage: $0 [-y]"
-    echo "  -y    Auto-confirm all prompts"
-    exit 0
-fi
+USE_NORMAL_TIME=false
+CUSTOM_PATHS=()
 
-# List of repos to back up
-REPOS=(
-    "$HOME/.config/nvim"
-    "$HOME/.config/nixos-private"
-    "$HOME/.config/nixos"
-    "$HOME/.config"
-)
+# Process command-line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -y)
+            AUTO_CONFIRM=true
+            ;;
+        -d)
+            USE_NORMAL_TIME=true
+            ;;
+        -h)
+            echo "Usage: $0 [-y] [-d] [path1] [path2] ..."
+            echo "  -y    Auto-confirm all prompts"
+            echo "  -d    Use normal date format (YYYY-MM-DD HH:MM:SS) instead of epoch time"
+            echo "  [path] Backup specified path(s) instead of default repos"
+            exit 0
+            ;;
+        *)
+            # Treat non-flag arguments as custom paths
+            CUSTOM_PATHS+=("$1")
+            ;;
+    esac
+    shift
+done
+
+# Determine which repos to back up
+if [ ${#CUSTOM_PATHS[@]} -eq 0 ]; then
+    # Default repos if no custom paths provided
+    REPOS=(
+        "$HOME/.config/nvim"
+        "$HOME/.config/nixos-private"
+        "$HOME/.config/nixos"
+        "$HOME/.config"
+    )
+else
+    REPOS=("${CUSTOM_PATHS[@]}")
+fi
 
 for repo in "${REPOS[@]}"; do
     echo
@@ -42,9 +66,16 @@ for repo in "${REPOS[@]}"; do
         git diff
     fi
 
+    # Determine timestamp format
+    if [ "$USE_NORMAL_TIME" = true ]; then
+        TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+    else
+        TIMESTAMP=$(date +%s)
+    fi
+
     if [ "$AUTO_CONFIRM" = true ]; then
         git add .
-        COMMIT_MSG="Backup: $(date +%s)"
+        COMMIT_MSG="Backup: $TIMESTAMP"
         git commit -m "$COMMIT_MSG"
         git push
         echo "Auto-pushed $repo"
@@ -52,7 +83,7 @@ for repo in "${REPOS[@]}"; do
         read -p "Commit and push changes in $repo? (y/N): " choice
         if [[ "$choice" =~ ^[Yy]$ ]]; then
             git add .
-            COMMIT_MSG="Backup: $(date +%s)"
+            COMMIT_MSG="Backup: $TIMESTAMP"
             git commit -m "$COMMIT_MSG"
             git push
         else
